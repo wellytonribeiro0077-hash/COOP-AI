@@ -1,366 +1,271 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mini Standoff 2 2D</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background: #222;
-            font-family: Arial, sans-serif;
-        }
-        #game-container {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        canvas {
-            display: block;
-            background: #444;
-            width: 100%;
-            height: auto;
-            border: 2px solid #fff;
-        }
-        .joystick {
-            position: absolute;
-            bottom: 50px;
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2);
-            touch-action: manipulation;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .joystick-inner {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.5);
-            position: absolute;
-            transition: transform 0.1s;
-        }
-        #joystick-left { left: 50px; }
-        #joystick-right { right: 50px; }
-        .game-over {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 40px;
-            color: red;
-            text-align: center;
-            display: none;
-        }
-        @media (min-width: 801px) {
-            .joystick {
-                display: none; /* Hide joysticks on desktop */
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1 - Corrida 3D Aprimorada</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #202020;
+  }
+  canvas {
+    display: block;
+  }
+  #controls {
+    position: fixed;
+    bottom: 20px;
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+    pointer-events: none;
+  }
+  /* Estilo aprimorado para controles de toque */
+  .btn {
+    width: 80px;
+    height: 80px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+    pointer-events: all;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    color: white;
+    user-select: none;
+    cursor: pointer;
+  }
+  #controls-vertical {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+  }
+  .btn-v {
+    margin-bottom: 10px;
+    width: 60px;
+    height: 60px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+    pointer-events: all;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    color: white;
+    user-select: none;
+    cursor: pointer;
+  }
+</style>
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="gameCanvas" width="800" height="500"></canvas>
-        <div class="joystick" id="joystick-left"><div class="joystick-inner" id="left-inner"></div></div>
-        <div class="joystick" id="joystick-right"><div class="joystick-inner" id="right-inner"></div></div>
-        <div class="game-over" id="gameOverText">
-            Game Over<br>Pontos: <span id="finalScore">0</span>
-        </div>
-    </div>
-    <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
 
-        // Adjust for high-DPI displays
-        const scale = window.devicePixelRatio;
-        canvas.style.width = "800px";
-        canvas.style.height = "500px";
-        canvas.width = 800 * scale;
-        canvas.height = 500 * scale;
-        ctx.scale(scale, scale);
+<canvas id="game"></canvas>
 
-        let player = { x: 400, y: 250, angle: 0, health: 100, lastShot: 0 };
-        let bullets = [];
-        let enemies = [
-            { x: 100, y: 100, speed: 1, health: 50 },
-            { x: 700, y: 400, speed: 1, health: 50 }
-        ];
-        let score = 0;
-        let gameRunning = true;
-        let lastTime = 0;
-        let lastSpawn = 0;
+<div id="controls">
+  <div class="btn" id="left">⟵</div>
+  <div class="btn" id="right">⟶</div>
+</div>
 
-        // Input handling
-        let move = { x: 0, y: 0 };
-        let shoot = { x: 0, y: 0 };
-        const keys = { w: false, s: false, a: false, d: false, up: false, down: false, left: false, right: false };
+<div id="controls-vertical">
+    <div class="btn-v" id="up">⇧</div>
+    <div class="btn-v" id="down">⇩</div>
+</div>
 
-        // Sound effects
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playSound(frequency, duration) {
-            const oscillator = audioCtx.createOscillator();
-            oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
-            oscillator.connect(audioCtx.destination);
-            oscillator.start();
-            setTimeout(() => oscillator.stop(), duration);
-        }
-        function playShootSound() { playSound(800, 50); }
-        function playHitSound() { playSound(400, 100); }
-        function playGameOverSound() { playSound(200, 200); }
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-        function drawPlayer() {
-            ctx.save();
-            ctx.translate(player.x, player.y);
-            ctx.rotate(player.angle);
-            ctx.fillStyle = "#00FF00"; // Green body
-            ctx.fillRect(-15, -10, 30, 20);
-            ctx.fillStyle = "#FFD700"; // Yellow head
-            ctx.beginPath();
-            ctx.arc(10, 0, 8, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#000"; // Eyes
-            ctx.beginPath();
-            ctx.arc(8, -4, 2, 0, Math.PI * 2);
-            ctx.arc(8, 4, 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#888"; // Gun
-            ctx.fillRect(15, -2, 10, 4);
-            ctx.restore();
-            // Health bar
-            ctx.fillStyle = "#FF0000";
-            ctx.fillRect(player.x - 20, player.y - 20, 40, 5);
-            ctx.fillStyle = "#00FF00";
-            ctx.fillRect(player.x - 20, player.y - 20, 40 * (player.health / 100), 5);
-        }
+// Variáveis de Jogo
+let speed = 0;              // Velocidade atual (agora começa em 0)
+const maxSpeed = 15;        // Velocidade máxima
+const minSpeed = 0;         // Velocidade mínima
+let turn = 0;               // Ângulo de esterço
+let roadOffset = 0;         // Deslocamento horizontal da pista (para virar)
+let curve = 0;              // Posição na curva da pista
+let roadZ = 0;              // Posição Z da estrada (para rolagem das linhas)
 
-        function drawBullets() {
-            bullets.forEach(b => {
-                ctx.fillStyle = "#FF0000";
-                ctx.fillRect(b.x - 5, b.y - 5, 10, 10);
-                ctx.strokeStyle = "#FFF";
-                ctx.lineWidth = 1;
-                ctx.strokeRect(b.x - 5, b.y - 5, 10, 10);
-            });
-        }
+// Variáveis de Controle
+let turningLeft = false;
+let turningRight = false;
+let accelerating = false;
+let braking = false;
 
-        function drawEnemies() {
-            enemies.forEach(e => {
-                ctx.fillStyle = "#800080"; // Purple body
-                ctx.fillRect(e.x - 15, e.y - 15, 30, 30);
-                ctx.fillStyle = "#000";
-                ctx.beginPath();
-                ctx.arc(e.x - 5, e.y - 5, 3, 0, Math.PI * 2);
-                ctx.arc(e.x + 5, e.y - 5, 3, 0, Math.PI * 2);
-                ctx.fill();
-                // Health bar
-                ctx.fillStyle = "#FF0000";
-                ctx.fillRect(e.x - 15, e.y - 25, 30, 5);
-                ctx.fillStyle = "#00FF00";
-                ctx.fillRect(e.x - 15, e.y - 25, 30 * (e.health / 50), 5);
-            });
-        }
+// Ajusta o tamanho do canvas
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas(); 
 
-        function drawScore() {
-            ctx.font = "20px Arial";
-            ctx.fillStyle = "#FFF";
-            ctx.fillText(`Pontos: ${score}`, 10, 30);
-        }
+// --- Configuração de Controles ---
 
-        function update(deltaTime) {
-            // Player movement
-            let moveSpeed = 3 * deltaTime;
-            if (keys.a || keys.d || keys.w || keys.s) {
-                move.x = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
-                move.y = (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
-                const mag = Math.sqrt(move.x * move.x + move.y * move.y);
-                if (mag > 0) {
-                    move.x /= mag;
-                    move.y /= mag;
-                }
-            }
-            player.x += move.x * moveSpeed;
-            player.y += move.y * moveSpeed;
+// Funções de Eventos para Touch e Mouse
+const touchEvents = (id, flag, value) => {
+    document.getElementById(id).addEventListener("touchstart", (e) => { e.preventDefault(); window[flag] = value; });
+    document.getElementById(id).addEventListener("touchend", () => window[flag] = false);
+    // Adiciona suporte a mouse down/up para desktop nos botões
+    document.getElementById(id).addEventListener("mousedown", () => window[flag] = value);
+    document.getElementById(id).addEventListener("mouseup", () => window[flag] = false);
+};
 
-            // Screen bounds
-            player.x = Math.max(15, Math.min(canvas.width - 15, player.x));
-            player.y = Math.max(15, Math.min(canvas.height - 15, player.y));
+// Controles de direção
+touchEvents("left", "turningLeft", true);
+touchEvents("right", "turningRight", true);
 
-            // Player aiming and shooting
-            if (keys.left || keys.right || keys.up || keys.down) {
-                shoot.x = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-                shoot.y = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
-                const mag = Math.sqrt(shoot.x * shoot.x + shoot.y * shoot.y);
-                if (mag > 0) {
-                    shoot.x /= mag;
-                    shoot.y /= mag;
-                }
-            }
-            if (shoot.x !== 0 || shoot.y !== 0) {
-                player.angle = Math.atan2(shoot.y, shoot.x);
-                if (!player.lastShot || Date.now() - player.lastShot > 300) {
-                    bullets.push({
-                        x: player.x + Math.cos(player.angle) * 15,
-                        y: player.y + Math.sin(player.angle) * 15,
-                        vx: Math.cos(player.angle) * 5,
-                        vy: Math.sin(player.angle) * 5
-                    });
-                    player.lastShot = Date.now();
-                    playShootSound();
-                }
-            }
+// Controles de velocidade
+touchEvents("up", "accelerating", true);
+touchEvents("down", "braking", true);
 
-            // Update bullets
-            bullets.forEach((b, i) => {
-                b.x += b.vx * deltaTime;
-                b.y += b.vy * deltaTime;
-                if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
-                    bullets.splice(i, 1);
-                }
-            });
+// Controles de Teclado
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft") turningLeft = true;
+  if (e.key === "ArrowRight") turningRight = true;
+  if (e.key === "ArrowUp") accelerating = true;
+  if (e.key === "ArrowDown") braking = true;
+});
 
-            // Update enemies
-            enemies.forEach((e, i) => {
-                const dx = player.x - e.x;
-                const dy = player.y - e.y;
-                const mag = Math.sqrt(dx * dx + dy * dy);
-                if (mag > 0) {
-                    e.x += (dx / mag) * e.speed * deltaTime;
-                    e.y += (dy / mag) * e.speed * deltaTime;
-                }
-                // Enemy collision with player
-                if (Math.hypot(player.x - e.x, player.y - e.y) < 30) {
-                    player.health -= 10 * deltaTime;
-                    if (player.health <= 0) gameOver();
-                }
-                // Bullet collision with enemy
-                bullets.forEach((b, j) => {
-                    if (Math.hypot(b.x - e.x, b.y - e.y) < 20) {
-                        e.health -= 10;
-                        bullets.splice(j, 1);
-                        if (e.health <= 0) {
-                            enemies.splice(i, 1);
-                            score += 100;
-                            playHitSound();
-                        }
-                    }
-                });
-            });
+document.addEventListener("keyup", e => {
+  if (e.key === "ArrowLeft") turningLeft = false;
+  if (e.key === "ArrowRight") turningRight = false;
+  if (e.key === "ArrowUp") accelerating = false;
+  if (e.key === "ArrowDown") braking = false;
+});
 
-            // Spawn new enemies
-            if (Date.now() - lastSpawn > 5000 && enemies.length < 5) {
-                const side = Math.floor(Math.random() * 4);
-                let x, y;
-                if (side === 0) { x = Math.random() * canvas.width; y = 0; }
-                else if (side === 1) { x = Math.random() * canvas.width; y = canvas.height; }
-                else if (side === 2) { x = 0; y = Math.random() * canvas.height; }
-                else { x = canvas.width; y = Math.random() * canvas.height; }
-                enemies.push({ x, y, speed: 1, health: 50 });
-                lastSpawn = Date.now();
-            }
-        }
+// --- Funções de Desenho ---
 
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            gradient.addColorStop(0, '#444');
-            gradient.addColorStop(1, '#222');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+/**
+ * Desenha a estrada com perspectiva 3D e efeito de movimento.
+ */
+function drawRoad() {
+  const horizon = canvas.height / 2;
+  
+  // A cada iteração (frame), a posição Z da estrada avança pela velocidade.
+  // Isso cria o efeito de rolagem da pista.
+  roadZ = (roadZ + speed * 0.1) % 20;
 
-            drawEnemies();
-            drawBullets();
-            drawPlayer();
-            drawScore();
-        }
+  // Loop de baixo para cima (do mais perto para o mais longe)
+  for (let y = 0; y < horizon; y++) {
+    const perspective = y / horizon;
+    
+    // Cálculo da largura e posição central da pista
+    const roadWidth = 2000 * (1 - perspective);
+    const x = canvas.width / 2 + roadOffset * perspective;
+    const left = x - roadWidth / 2;
+    // const right = x + roadWidth / 2;
 
-        function gameOver() {
-            gameRunning = false;
-            document.getElementById('finalScore').textContent = score;
-            document.getElementById('gameOverText').style.display = 'block';
-            playGameOverSound();
-        }
+    // Define a cor alternada das linhas da pista para simular movimento
+    // Usa 'roadZ' para deslocar as linhas de acordo com a velocidade
+    const lineIndex = Math.floor((y + roadZ) / 20); // 20 é o espaçamento das linhas
+    ctx.fillStyle = lineIndex % 2 === 0 ? "#111" : "#0a0a0a"; 
+    
+    // Desenha o segmento da pista
+    ctx.fillRect(left, canvas.height - y, roadWidth, 2); 
+    
+    // Opcional: Desenha as linhas laterais (guard-rails)
+    ctx.fillStyle = "white";
+    ctx.fillRect(left - 10, canvas.height - y, 5, 2); // Borda Esquerda
+    ctx.fillRect(left + roadWidth + 5, canvas.height - y, 5, 2); // Borda Direita
+  }
+}
 
-        function gameLoop(time) {
-            if (!gameRunning) return;
-            const deltaTime = (time - lastTime) / 16.67; // Normalize to 60fps
-            lastTime = time;
+/**
+ * Desenha a HUD com a velocidade.
+ */
+function drawHUD() {
+  ctx.fillStyle = "#fff";
+  ctx.font = "20px Arial";
+  // A velocidade é mapeada para algo mais realista
+  ctx.fillText("Velocidade: " + Math.floor(speed * 25) + " km/h", 20, 40);
+  ctx.fillText("Pista: " + (curve > 0 ? "Curva Dir." : curve < 0 ? "Curva Esq." : "Reta"), 20, 70);
+}
 
-            update(deltaTime);
-            draw();
-            requestAnimationFrame(gameLoop);
-        }
+/**
+ * Desenha o carro.
+ */
+function drawCar() {
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  // Base do carro
+  ctx.moveTo(canvas.width / 2 - 40, canvas.height - 50);
+  ctx.lineTo(canvas.width / 2 + 40, canvas.height - 50);
+  // Frente do carro (o deslocamento do nariz pode simular a curva)
+  const noseX = canvas.width / 2 + turn * 20; 
+  ctx.lineTo(noseX, canvas.height - 120);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Rodas (simplificadas)
+  ctx.fillStyle = "#333";
+  ctx.fillRect(canvas.width / 2 - 50, canvas.height - 60, 10, 20); // Roda Esquerda
+  ctx.fillRect(canvas.width / 2 + 40, canvas.height - 60, 10, 20); // Roda Direita
+}
 
-        // Joystick handling
-        function joystick(id, callback) {
-            const stick = document.getElementById(id);
-            const inner = document.getElementById(id + '-inner');
-            let rect = stick.getBoundingClientRect();
-            let center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-            let active = false;
 
-            stick.addEventListener("touchstart", e => {
-                e.preventDefault();
-                active = true;
-            });
-            stick.addEventListener("touchend", e => {
-                e.preventDefault();
-                active = false;
-                callback({ x: 0, y: 0 });
-                inner.style.transform = `translate(0px, 0px)`;
-            });
-            stick.addEventListener("touchmove", e => {
-                if (!active) return;
-                e.preventDefault();
-                const touch = e.touches[0];
-                let dx = touch.clientX - center.x;
-                let dy = touch.clientY - center.y;
-                const mag = Math.sqrt(dx * dx + dy * dy);
-                if (mag > 50) {
-                    dx = (dx / mag) * 50;
-                    dy = (dy / mag) * 50;
-                }
-                callback({ x: dx / 50, y: dy / 50 });
-                inner.style.transform = `translate(${dx}px, ${dy}px)`;
-            });
-            // Update center on window resize
-            window.addEventListener("resize", () => {
-                rect = stick.getBoundingClientRect();
-                center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-            });
-        }
+// --- Lógica do Jogo ---
 
-        joystick("joystick-left", v => move = v);
-        joystick("joystick-right", v => shoot = v);
+/**
+ * Atualiza o estado do jogo.
+ */
+function update() {
+  // 1. Controle de Velocidade
+  if (accelerating) {
+    speed = Math.min(speed + 0.1, maxSpeed);
+  } else if (braking) {
+    speed = Math.max(speed - 0.2, minSpeed);
+  }
+  // Fricção (Desaceleração natural)
+  speed *= 0.99; 
+  if (speed < 0.1) speed = 0;
 
-        // Keyboard controls
-        document.addEventListener('keydown', e => {
-            if (e.key === 'w' || e.key === 'W') keys.w = true;
-            if (e.key === 's' || e.key === 'S') keys.s = true;
-            if (e.key === 'a' || e.key === 'A') keys.a = true;
-            if (e.key === 'd' || e.key === 'D') keys.d = true;
-            if (e.key === 'ArrowUp') keys.up = true;
-            if (e.key === 'ArrowDown') keys.down = true;
-            if (e.key === 'ArrowLeft') keys.left = true;
-            if (e.key === 'ArrowRight') keys.right = true;
-        });
-        document.addEventListener('keyup', e => {
-            if (e.key === 'w' || e.key === 'W') keys.w = false;
-            if (e.key === 's' || e.key === 'S') keys.s = false;
-            if (e.key === 'a' || e.key === 'A') keys.a = false;
-            if (e.key === 'd' || e.key === 'D') keys.d = false;
-            if (e.key === 'ArrowUp') keys.up = false;
-            if (e.key === 'ArrowDown') keys.down = false;
-            if (e.key === 'ArrowLeft') keys.left = false;
-            if (e.key === 'ArrowRight') keys.right = false;
-        });
+  // 2. Controle de Direção (Esterço)
+  if (turningLeft) turn -= 0.005;
+  if (turningRight) turn += 0.005;
+  
+  // Restaura o esterço levemente ao soltar o controle
+  turn *= 0.95;
 
-        requestAnimationFrame(gameLoop);
-    </script>
+  // 3. Simulação de Curvas da Pista
+  // Faz a pista curvar suavemente ao longo do tempo (crescendo e decrescendo)
+  curve = Math.sin(Date.now() * 0.0001) * 300; // Oscila entre -300 e 300
+  
+  // 4. Movimento da Estrada
+  // roadOffset é a soma: 
+  //   a) Ação do jogador (Math.sin(turn))
+  //   b) Curva da pista (curve)
+  roadOffset += (Math.sin(turn) * speed * 0.5) + (curve - roadOffset) * 0.005 * speed;
+  
+  // Limitador simples de RoadOffset (para não sair demais da tela)
+  roadOffset = Math.max(-500, Math.min(500, roadOffset));
+  
+  // 5. Penalidade por Alta Velocidade na Curva (Exemplo de lógica de jogabilidade)
+  if (Math.abs(curve) > 100 && speed > 10) {
+      // Se estiver muito rápido em uma curva fechada, penaliza a direção
+      roadOffset += Math.sign(roadOffset - curve) * (speed - 10) * 0.5;
+  }
+}
+
+/**
+ * O loop principal do jogo (Game Loop).
+ */
+function loop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height); // Limpa o canvas
+
+  drawRoad();
+  drawCar();
+  drawHUD();
+  
+  update();
+
+  requestAnimationFrame(loop);
+}
+
+// Inicia o jogo
+loop();
+</script>
 </body>
 </html>
